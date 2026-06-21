@@ -40,8 +40,10 @@ function authenticateToken(req, res, next) {
   const token = authHeader && authHeader.startsWith('Bearer ') ? authHeader.slice(7) : req.query.token;
   if (!token) return res.status(401).json({ code: 401, message: '未提供认证令牌' });
   try {
-    const decoded = JSON.parse(Buffer.from(token, 'base64').toString());
-    req.user = { userId: decoded.userId, role: decoded.role };
+    // Token 格式为 base64("userId:role:timestamp")，用字符串分割解析
+    const decoded = Buffer.from(token, 'base64').toString('utf-8');
+    const [userId, role] = decoded.split(':');
+    req.user = { userId: parseInt(userId), role: role };
     next();
   } catch (e) {
     return res.status(401).json({ code: 401, message: '令牌无效或已过期' });

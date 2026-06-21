@@ -720,7 +720,7 @@
       if (!reason) { showToast('请输入咨询原因', 'warning'); return; }
 
       // 防连击：锁定提交按钮
-      const submitBtn = event.target;
+      const submitBtn = document.querySelector('#tab-consult button.btn-primary');
       const origHTML = submitBtn.innerHTML;
       submitBtn.disabled = true;
       submitBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> 提交中...';

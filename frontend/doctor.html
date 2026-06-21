@@ -470,7 +470,7 @@
             if (!da) { showToast('请输入医生建议', 'warning'); return; }
             // 防重复点击：锁定提交按钮
             const submitBtn = document.querySelector('#plan-form button[type="submit"]');
-            const origText = submitBtn.innerHTML;
+            const origHTML = submitBtn.innerHTML;
             submitBtn.disabled = true;
             submitBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> 提交中...';
             try {
@@ -493,7 +493,7 @@
             finally {
                 // 恢复提交按钮
                 submitBtn.disabled = false;
-                submitBtn.innerHTML = origText;
+                submitBtn.innerHTML = origHTML;
             }
         }
 
