@@ -1,0 +1,560 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>医生端 - 岐黄智诊</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <style>
+        :root {
+            --color-bg: #f5f7fa;
+            --color-surface: #ffffff;
+            --color-primary: #059669;
+            --color-primary-light: #34d399;
+            --color-primary-dark: #047857;
+            --color-accent: #d97706;
+            --color-text: #1f2937;
+            --color-text-secondary: #6b7280;
+            --color-border: #e5e7eb;
+            --shadow-soft: 0 4px 20px rgba(0, 0, 0, 0.05);
+            --shadow-hover: 0 8px 30px rgba(5, 150, 105, 0.15);
+        }
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC', 'Microsoft YaHei', sans-serif;
+            background: var(--color-bg);
+            color: var(--color-text);
+            min-height: 100vh;
+        }
+        .page { display: none; animation: pageIn 0.4s ease; }
+        .page.active { display: block; }
+        @keyframes pageIn { from { opacity: 0; transform: translateY(20px); } to { opacity: 1; transform: translateY(0); } }
+        .card { background: var(--color-surface); border-radius: 16px; box-shadow: var(--shadow-soft); transition: all 0.3s ease; }
+        .card:hover { box-shadow: var(--shadow-hover); }
+        .btn { display: inline-flex; align-items: center; justify-content: center; gap: 8px; padding: 12px 24px; border: none; border-radius: 10px; font-size: 14px; font-weight: 500; cursor: pointer; transition: all 0.25s ease; }
+        .btn:hover { transform: translateY(-2px); }
+        .btn-primary { background: linear-gradient(135deg, var(--color-primary), var(--color-primary-dark)); color: white; }
+        .btn-primary:hover { box-shadow: 0 6px 20px rgba(5, 150, 105, 0.4); }
+        .btn-outline { background: white; border: 1px solid var(--color-border); color: var(--color-text-secondary); }
+        .btn-outline:hover { border-color: var(--color-primary); color: var(--color-primary); background: #ecfdf5; }
+        .status-tag { display: inline-flex; align-items: center; padding: 4px 12px; border-radius: 20px; font-size: 12px; font-weight: 500; }
+        .status-pending { background: #fef3c7; color: #d97706; }
+        .status-processing { background: #dbeafe; color: #2563eb; }
+        .status-completed { background: #d1fae5; color: var(--color-primary); }
+        .status-cancelled { background: #f3f4f6; color: #9ca3af; }
+        .tab-item { padding: 10px 20px; cursor: pointer; color: var(--color-text-secondary); border-bottom: 3px solid transparent; transition: all 0.3s ease; }
+        .tab-item:hover { color: var(--color-primary); }
+        .tab-item.active { color: var(--color-primary); border-bottom-color: var(--color-primary); font-weight: 600; }
+        .input-focus { border: 1px solid var(--color-border); border-radius: 10px; padding: 12px 16px; font-size: 14px; transition: all 0.3s ease; outline: none; width: 100%; }
+        .input-focus:focus { border-color: var(--color-primary); box-shadow: 0 0 0 3px rgba(5, 150, 105, 0.1); }
+        .toast { position: fixed; top: 20px; right: 20px; padding: 14px 20px; border-radius: 10px; color: white; font-size: 14px; z-index: 9999; transform: translateX(120%); transition: transform 0.3s ease; display: flex; align-items: center; gap: 10px; box-shadow: 0 4px 20px rgba(0, 0, 0, 0.15); }
+        .toast.show { transform: translateX(0); }
+        .toast.success { background: linear-gradient(135deg, #10b981, #059669); }
+        .toast.error { background: linear-gradient(135deg, #ef4444, #dc2626); }
+        .toast.warning { background: linear-gradient(135deg, #f59e0b, #d97706); }
+        .modal-overlay { position: fixed; inset: 0; background: rgba(0, 0, 0, 0.5); display: none; align-items: center; justify-content: center; z-index: 1000; padding: 20px; }
+        .modal-overlay.active { display: flex; }
+        .modal { background: white; border-radius: 16px; max-width: 560px; width: 100%; max-height: 90vh; overflow: auto; animation: modalIn 0.3s ease; padding: 24px; }
+        @keyframes modalIn { from { opacity: 0; transform: scale(0.9); } to { opacity: 1; transform: scale(1); } }
+        .avatar { width: 48px; height: 48px; border-radius: 50%; display: flex; align-items: center; justify-content: center; color: white; font-size: 18px; font-weight: 600; flex-shrink: 0; }
+        .avatar-male { background: linear-gradient(135deg, #667eea, #764ba2); }
+        .avatar-female { background: linear-gradient(135deg, #f093fb, #f5576c); }
+        @media (max-width: 768px) { .stats-grid { grid-template-columns: repeat(2, 1fr) !important; } .consult-grid { grid-template-columns: 1fr !important; } }
+        .hidden { display: none !important; }
+    </style>
+</head>
+<body>
+    <!-- Toast -->
+    <div id="toast" class="toast"><i class="fas fa-check-circle"></i><span id="toastMessage"></span></div>
+
+    <!-- ==================== 登录页 ==================== -->
+    <div id="page-login" class="page active">
+        <div class="min-h-screen flex items-center justify-center relative overflow-hidden" style="background: linear-gradient(135deg, #f5f7fa 0%, #e8f5e9 100%);">
+            <div class="absolute inset-0 opacity-30" style="background-image: radial-gradient(circle at 25% 25%, #059669 1px, transparent 1px), radial-gradient(circle at 75% 75%, #059669 1px, transparent 1px); background-size: 60px 60px;"></div>
+            <div class="relative z-10 w-full max-w-md px-5">
+                <div class="card p-10">
+                    <div class="text-center mb-8">
+                        <div class="flex justify-center mb-4">
+                            <svg width="56" height="56" viewBox="0 0 48 48" fill="none">
+                                <circle cx="24" cy="24" r="22" stroke="#059669" stroke-width="2" fill="#ecfdf5"/>
+                                <path d="M24 14C24 14 18 20 18 26C18 30.4183 20.6863 34 24 34C27.3137 34 30 30.4183 30 26C30 20 24 14 24 14Z" fill="#059669"/>
+                                <circle cx="24" cy="26" r="3" fill="#34d399"/>
+                            </svg>
+                        </div>
+                        <h1 class="text-3xl font-bold mb-2" style="color: var(--color-primary);">岐黄智诊</h1>
+                        <p class="text-sm" style="color: var(--color-text-secondary);">医生端控制台</p>
+                    </div>
+                    <div class="space-y-5">
+                        <div>
+                            <label class="block text-sm font-medium mb-2">账号</label>
+                            <input type="text" id="login-username" class="input-focus" placeholder="请输入账号" value="doctor">
+                        </div>
+                        <div>
+                            <label class="block text-sm font-medium mb-2">密码</label>
+                            <input type="password" id="login-password" class="input-focus" placeholder="请输入密码" value="123456">
+                        </div>
+                        <button class="btn btn-primary w-full py-3 text-base" onclick="handleLogin()">
+                            <i class="fas fa-sign-in-alt"></i> 登 录
+                        </button>
+                    </div>
+                    <div class="mt-8 text-center">
+                        <p class="text-xs" style="color: #9ca3af;">医生账号: doctor / 密码任意</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- ==================== 医生工作台 ==================== -->
+    <div id="page-workspace" class="page">
+        <nav class="bg-white shadow-sm sticky top-0 z-50">
+            <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+                <div class="flex justify-between items-center h-16">
+                    <div class="flex items-center gap-3">
+                        <svg width="36" height="36" viewBox="0 0 48 48" fill="none">
+                            <circle cx="24" cy="24" r="22" stroke="#059669" stroke-width="2" fill="#ecfdf5"/>
+                            <path d="M24 14C24 14 18 20 18 26C18 30.4183 20.6863 34 24 34C27.3137 34 30 30.4183 30 26C30 20 24 14 24 14Z" fill="#059669"/>
+                            <circle cx="24" cy="26" r="3" fill="#34d399"/>
+                        </svg>
+                        <span class="text-xl font-bold" style="color: var(--color-primary);">岐黄智诊</span>
+                    </div>
+                    <div class="flex items-center gap-4">
+                        <div class="relative">
+                            <div class="flex items-center gap-2 px-3 py-2 rounded-lg hover:bg-gray-50 cursor-pointer" onclick="toggleUserMenu()">
+                                <div class="avatar avatar-male">张</div>
+                                <span class="text-sm font-medium" style="color: var(--color-text);">张医生</span>
+                                <i class="fas fa-chevron-down text-xs" style="color: var(--color-text-secondary);"></i>
+                            </div>
+                            <div id="user-menu-dropdown" class="hidden absolute right-0 mt-2 w-48 card p-0 z-50">
+                                <div class="p-4 border-b text-center">
+                                    <div class="avatar avatar-male mx-auto mb-2">张</div>
+                                    <div class="font-semibold">张医生</div>
+                                    <div class="text-xs" style="color: var(--color-text-secondary);">主治医师</div>
+                                </div>
+                                <div class="py-2">
+                                    <div class="border-t my-2"></div>
+                                    <div class="px-4 py-2 hover:bg-red-50 cursor-pointer flex items-center gap-3" onclick="handleLogout()" style="color: #ef4444;">
+                                        <i class="fas fa-sign-out-alt"></i>
+                                        <span class="text-sm">退出登录</span>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </nav>
+
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+            <div class="mb-8">
+                <h1 class="text-2xl font-bold mb-2" style="color: var(--color-text);">咨询单管理</h1>
+                <p class="text-sm" style="color: var(--color-text-secondary);">管理患者的体质咨询与调理方案</p>
+            </div>
+
+            <!-- 统计卡片 -->
+            <div class="grid grid-cols-4 gap-5 mb-8" id="stats-grid"></div>
+
+            <!-- Tab 筛选 -->
+            <div class="card p-6">
+                <div class="flex border-b mb-6" id="consult-tabs">
+                    <div class="tab-item active" data-tab="all" onclick="switchTab('all')">全部 <span class="ml-1 text-xs" id="count-all"></span></div>
+                    <div class="tab-item" data-tab="pending" onclick="switchTab('pending')">待处理 <span class="ml-1 text-xs" id="count-pending"></span></div>
+                    <div class="tab-item" data-tab="processing" onclick="switchTab('processing')">咨询中 <span class="ml-1 text-xs" id="count-processing"></span></div>
+                    <div class="tab-item" data-tab="completed" onclick="switchTab('completed')">已完成 <span class="ml-1 text-xs" id="count-completed"></span></div>
+                </div>
+                <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5" id="consult-list"></div>
+            </div>
+        </div>
+    </div>
+
+    <!-- ==================== 调理方案提交弹窗 ==================== -->
+    <div class="modal-overlay" id="plan-modal">
+        <div class="modal">
+            <div class="flex justify-between items-center mb-4">
+                <h3 class="font-semibold text-lg">提交调理方案</h3>
+                <button onclick="closePlanModal()" class="text-gray-400 hover:text-gray-600"><i class="fas fa-times text-xl"></i></button>
+            </div>
+            <div class="text-sm text-gray-500 mb-4" id="plan-order-info"></div>
+            <form id="plan-form" class="space-y-4" onsubmit="event.preventDefault(); submitPlan()">
+                <div>
+                    <label class="block text-sm font-medium mb-2">医生建议 <span class="text-red-500">*</span></label>
+                    <textarea id="plan-doctor-advice" class="input-focus" rows="3" placeholder="请输入医生调理建议..." required></textarea>
+                </div>
+                <div>
+                    <label class="block text-sm font-medium mb-2">饮食建议</label>
+                    <textarea id="plan-diet-advice" class="input-focus" rows="2" placeholder="饮食建议..."></textarea>
+                </div>
+                <div>
+                    <label class="block text-sm font-medium mb-2">运动建议</label>
+                    <textarea id="plan-exercise-advice" class="input-focus" rows="2" placeholder="运动建议..."></textarea>
+                </div>
+                <div>
+                    <label class="block text-sm font-medium mb-2">生活习惯建议</label>
+                    <textarea id="plan-lifestyle-advice" class="input-focus" rows="2" placeholder="生活习惯建议..."></textarea>
+                </div>
+                <div>
+                    <label class="block text-sm font-medium mb-2">禁忌提示</label>
+                    <textarea id="plan-contraindication" class="input-focus" rows="2" placeholder="禁忌提示..."></textarea>
+                </div>
+                <div>
+                    <label class="block text-sm font-medium mb-2">随访建议</label>
+                    <textarea id="plan-followup" class="input-focus" rows="2" placeholder="随访建议..."></textarea>
+                </div>
+                <div class="flex gap-3 justify-end pt-2">
+                    <button type="button" class="btn btn-outline" onclick="closePlanModal()">取消</button>
+                    <button type="submit" class="btn btn-primary"><i class="fas fa-check"></i> 提交方案</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- ==================== 调理方案查看弹窗 ==================== -->
+    <div class="modal-overlay" id="plan-view-modal">
+        <div class="modal">
+            <div class="flex justify-between items-center mb-4">
+                <h3 class="font-semibold text-lg">调理方案详情</h3>
+                <button onclick="closeModal('plan-view-modal')" class="text-gray-400 hover:text-gray-600"><i class="fas fa-times text-xl"></i></button>
+            </div>
+            <div id="plan-view-content" class="space-y-4 text-sm"></div>
+            <div class="mt-4 flex justify-end">
+                <button class="btn btn-outline" onclick="closeModal('plan-view-modal')">关闭</button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const API_BASE = 'http://localhost:3000/api';
+        let allOrders = [];
+        let currentTab = 'all';
+        let planModalOrderId = null;
+
+        // ==================== 工具 ====================
+        function showToast(msg, type) {
+            const t = document.getElementById('toast');
+            document.getElementById('toastMessage').textContent = msg;
+            t.className = 'toast ' + (type || 'success');
+            t.classList.add('show');
+            setTimeout(() => t.classList.remove('show'), 3000);
+        }
+        function closeModal(id) { document.getElementById(id).classList.remove('active'); }
+
+        function getStatusInfo(status) {
+            const map = {
+                pending: { text: '待处理', cls: 'status-pending' },
+                processing: { text: '咨询中', cls: 'status-processing' },
+                completed: { text: '已完成', cls: 'status-completed' },
+                cancelled: { text: '已取消', cls: 'status-cancelled' }
+            };
+            return map[status] || map.pending;
+        }
+
+        // ==================== 登录 ====================
+        async function handleLogin() {
+            const u = document.getElementById('login-username').value.trim();
+            const p = document.getElementById('login-password').value.trim();
+            if (!u || !p) { showToast('请输入账号和密码', 'warning'); return; }
+            try {
+                const res = await fetch(`${API_BASE}/login`, {
+                    method: 'POST', headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ username: u, password: p })
+                });
+                const data = await res.json();
+                if (data.success) {
+                    showToast('登录成功！', 'success');
+                    setTimeout(() => {
+                        document.querySelectorAll('.page').forEach(x => x.classList.remove('active'));
+                        document.getElementById('page-workspace').classList.add('active');
+                        loadOrders();
+                    }, 500);
+                } else {
+                    showToast(data.message || '登录失败', 'error');
+                }
+            } catch (err) { showToast('无法连接服务器', 'error'); }
+        }
+
+        // ==================== 加载咨询单 ====================
+        async function loadOrders() {
+            try {
+                const res = await fetch(`${API_BASE}/consultation/orders?doctor_view=1`);
+                const result = await res.json();
+                if (result.code === 200 && result.data) {
+                    allOrders = result.data;
+                    renderStats();
+                    renderList();
+                }
+            } catch (err) {
+                document.getElementById('consult-list').innerHTML = '<div class="text-center py-8 text-gray-400">加载失败</div>';
+            }
+        }
+
+        function renderStats() {
+            const all = allOrders.length;
+            const pending = allOrders.filter(o => o.order_status === 'pending').length;
+            const processing = allOrders.filter(o => o.order_status === 'processing').length;
+            const completed = allOrders.filter(o => o.order_status === 'completed').length;
+
+            document.getElementById('stats-grid').innerHTML = `
+                <div class="card p-5 text-center hover:-translate-y-1">
+                    <div class="text-4xl font-bold mb-1" style="color: var(--color-primary);">${all}</div>
+                    <div class="text-sm" style="color: var(--color-text-secondary);">全部咨询</div>
+                </div>
+                <div class="card p-5 text-center hover:-translate-y-1">
+                    <div class="text-4xl font-bold mb-1" style="color: var(--color-accent);">${pending}</div>
+                    <div class="text-sm" style="color: var(--color-text-secondary);">待处理</div>
+                </div>
+                <div class="card p-5 text-center hover:-translate-y-1">
+                    <div class="text-4xl font-bold mb-1" style="color: #2563eb;">${processing}</div>
+                    <div class="text-sm" style="color: var(--color-text-secondary);">咨询中</div>
+                </div>
+                <div class="card p-5 text-center hover:-translate-y-1">
+                    <div class="text-4xl font-bold mb-1" style="color: #10b981;">${completed}</div>
+                    <div class="text-sm" style="color: var(--color-text-secondary);">已完成</div>
+                </div>
+            `;
+            document.getElementById('count-all').textContent = `(${all})`;
+            document.getElementById('count-pending').textContent = `(${pending})`;
+            document.getElementById('count-processing').textContent = `(${processing})`;
+            document.getElementById('count-completed').textContent = `(${completed})`;
+        }
+
+        function switchTab(tab) {
+            currentTab = tab;
+            document.querySelectorAll('#consult-tabs .tab-item').forEach(item => {
+                item.classList.toggle('active', item.dataset.tab === tab);
+            });
+            renderList();
+        }
+
+        function renderList() {
+            let filtered = allOrders;
+            if (currentTab !== 'all') filtered = allOrders.filter(o => o.order_status === currentTab);
+
+            if (filtered.length === 0) {
+                document.getElementById('consult-list').innerHTML = '<div class="text-center py-8 text-gray-400">暂无咨询单</div>';
+                return;
+            }
+
+            const genderMap = { male: '先生', female: '女士' };
+            const html = filtered.map(o => {
+                const si = getStatusInfo(o.order_status);
+                const genderText = genderMap[o.patient_gender] || '';
+                const avatarClass = o.patient_gender === 'female' ? 'avatar-female' : 'avatar-male';
+                // 解析舌象特征
+                let features = '';
+                try {
+                    const tf = typeof o.tongue_features === 'string' ? JSON.parse(o.tongue_features) : o.tongue_features;
+                    if (tf) features = `${tf.tongue_color || '-'} | ${tf.coating_color || '-'} | ${tf.tongue_shape || '-'}`;
+                } catch(e) {}
+
+                return `
+                    <div class="card p-5 hover:-translate-y-1">
+                        <!-- 头部：头像 + 状态 -->
+                        <div class="flex justify-between items-start mb-4">
+                            <div class="flex items-center gap-3">
+                                <div class="avatar ${avatarClass}">${(o.patient_name || '?').charAt(0)}</div>
+                                <div>
+                                    <div class="font-semibold" style="color: var(--color-text);">${o.patient_name || '未知'}${genderText}</div>
+                                    <div class="text-xs" style="color: var(--color-text-secondary);">${o.patient_age || '-'}岁</div>
+                                </div>
+                            </div>
+                            <span class="status-tag ${si.cls}">${si.text}</span>
+                        </div>
+
+                        <!-- 体质信息 -->
+                        <div class="mb-3">
+                            <div class="text-xs mb-2" style="color: var(--color-text-secondary);">体质辨识结果</div>
+                            <div class="flex items-center gap-3">
+                                <span class="px-3 py-1 rounded-full text-xs font-semibold" style="background: #ecfdf5; color: #059669;">${o.constitution_type || '-'}</span>
+                                ${o.confidence ? `<span class="text-xs font-semibold" style="color: var(--color-accent);">${o.confidence}%</span>` : ''}
+                            </div>
+                        </div>
+
+                        <!-- 舌象特征 -->
+                        ${features ? `
+                        <div class="mb-3">
+                            <div class="text-xs mb-1" style="color: var(--color-text-secondary);">舌象特征</div>
+                            <div class="text-xs" style="color: #6b7280;">${features}</div>
+                        </div>` : ''}
+
+                        <!-- 咨询原因 -->
+                        <div class="mb-3">
+                            <div class="text-xs mb-1" style="color: var(--color-text-secondary);">咨询内容</div>
+                            <div class="text-sm leading-relaxed" style="color: var(--color-text);">${o.consult_reason || '体质咨询'}</div>
+                        </div>
+
+                        <!-- 时间 -->
+                        <div class="text-xs mb-3" style="color: #9ca3af;">
+                            创建时间：${new Date(o.created_at).toLocaleString()}
+                            ${o.closed_at ? ` | 完成时间：${new Date(o.closed_at).toLocaleString()}` : ''}
+                        </div>
+
+                        <!-- 操作按钮 -->
+                        <div class="flex gap-2 pt-4 border-t">
+                            ${o.order_status === 'pending' ? `
+                                <button class="btn btn-primary flex-1 py-2 text-xs" onclick="acceptOrder(${o.order_id})">
+                                    <i class="fas fa-check"></i> 接单处理
+                                </button>
+                            ` : ''}
+                            ${o.order_status === 'processing' ? `
+                                <button class="btn btn-primary flex-1 py-2 text-xs" onclick="showPlanModal(${o.order_id})">
+                                    <i class="fas fa-edit"></i> 提交调理方案
+                                </button>
+                            ` : ''}
+                            ${o.order_status === 'completed' ? `
+                                <button class="btn btn-outline flex-1 py-2 text-xs" onclick="viewPlan(${o.order_id})">
+                                    <i class="fas fa-eye"></i> 查看方案
+                                </button>
+                            ` : ''}
+                            ${o.order_status === 'pending' || o.order_status === 'processing' ? `
+                                <button class="btn btn-outline flex-1 py-2 text-xs" onclick="showOrderDetail(${o.order_id})">
+                                    <i class="fas fa-info-circle"></i> 详情
+                                </button>
+                            ` : ''}
+                        </div>
+                    </div>
+                `;
+            }).join('');
+            document.getElementById('consult-list').innerHTML = html;
+        }
+
+        // ==================== 接单 ====================
+        async function acceptOrder(orderId) {
+            try {
+                const res = await fetch(`${API_BASE}/consultation/orders/${orderId}`, {
+                    method: 'PUT', headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ doctor_id: 1, order_status: 'processing' })
+                });
+                const data = await res.json();
+                if (data.code === 200) { showToast('已接单成功！', 'success'); loadOrders(); }
+                else { showToast(data.message || '操作失败', 'error'); }
+            } catch (err) { showToast('网络错误', 'error'); }
+        }
+
+        // ==================== 咨询单详情 ====================
+        function showOrderDetail(orderId) {
+            const order = allOrders.find(o => o.order_id == orderId);
+            if (!order) return;
+            const si = getStatusInfo(order.order_status);
+            showToast(
+                `患者：${order.patient_name} | 体质：${order.constitution_type} | 状态：${si.text}`,
+                'success'
+            );
+        }
+
+        // ==================== 提交调理方案 ====================
+        function showPlanModal(orderId) {
+            planModalOrderId = orderId;
+            const order = allOrders.find(o => o.order_id == orderId);
+            document.getElementById('plan-order-info').textContent = 
+                `咨询单 #${orderId} — 患者：${order.patient_name}，体质：${order.constitution_type}`;
+            document.getElementById('plan-modal').classList.add('active');
+        }
+
+        function closePlanModal() {
+            planModalOrderId = null;
+            document.getElementById('plan-modal').classList.remove('active');
+            document.getElementById('plan-form').reset();
+        }
+
+        async function submitPlan() {
+            if (!planModalOrderId) { showToast('订单信息缺失', 'warning'); return; }
+            const da = document.getElementById('plan-doctor-advice').value.trim();
+            if (!da) { showToast('请输入医生建议', 'warning'); return; }
+            try {
+                const res = await fetch(`${API_BASE}/consultation/plans`, {
+                    method: 'POST', headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        order_id: planModalOrderId, doctor_id: 1,
+                        doctor_advice: da,
+                        diet_advice: document.getElementById('plan-diet-advice').value.trim() || undefined,
+                        exercise_advice: document.getElementById('plan-exercise-advice').value.trim() || undefined,
+                        lifestyle_advice: document.getElementById('plan-lifestyle-advice').value.trim() || undefined,
+                        contraindication_tips: document.getElementById('plan-contraindication').value.trim() || undefined,
+                        followup_advice: document.getElementById('plan-followup').value.trim() || undefined
+                    })
+                });
+                const data = await res.json();
+                if (data.code === 200) { showToast('调理方案提交成功！', 'success'); closePlanModal(); loadOrders(); }
+                else { showToast(data.message || '提交失败', 'error'); }
+            } catch (err) { showToast('网络错误', 'error'); }
+        }
+
+        // ==================== 查看方案 ====================
+        async function viewPlan(orderId) {
+            try {
+                const res = await fetch(`${API_BASE}/consultation/plans?order_id=${orderId}`);
+                const result = await res.json();
+                if (result.code === 200 && result.data && result.data.length > 0) {
+                    const plan = result.data[0];
+                    document.getElementById('plan-view-content').innerHTML = `
+                        <div class="rounded-lg p-4" style="background: #ecfdf5;">
+                            <div class="flex items-center gap-2 mb-2">
+                                <i class="fas fa-stethoscope" style="color: var(--color-primary);"></i>
+                                <span class="font-semibold">医生建议</span>
+                            </div>
+                            <p class="text-sm leading-relaxed" style="color: #4b5563;">${plan.doctor_advice || '-'}</p>
+                        </div>
+                        ${plan.diet_advice ? `
+                        <div>
+                            <div class="flex items-center gap-2 mb-2"><i class="fas fa-utensils" style="color: var(--color-accent);"></i><span class="font-semibold">饮食建议</span></div>
+                            <p class="text-sm" style="color: #4b5563;">${plan.diet_advice}</p>
+                        </div>` : ''}
+                        ${plan.exercise_advice ? `
+                        <div>
+                            <div class="flex items-center gap-2 mb-2"><i class="fas fa-running" style="color: #2563eb;"></i><span class="font-semibold">运动建议</span></div>
+                            <p class="text-sm" style="color: #4b5563;">${plan.exercise_advice}</p>
+                        </div>` : ''}
+                        ${plan.lifestyle_advice ? `
+                        <div>
+                            <div class="flex items-center gap-2 mb-2"><i class="fas fa-moon" style="color: #7c3aed;"></i><span class="font-semibold">生活习惯</span></div>
+                            <p class="text-sm" style="color: #4b5563;">${plan.lifestyle_advice}</p>
+                        </div>` : ''}
+                        ${plan.contraindication_tips ? `
+                        <div>
+                            <div class="flex items-center gap-2 mb-2"><i class="fas fa-exclamation-triangle" style="color: #ef4444;"></i><span class="font-semibold">禁忌提示</span></div>
+                            <p class="text-sm" style="color: #4b5563;">${plan.contraindication_tips}</p>
+                        </div>` : ''}
+                        ${plan.followup_advice ? `
+                        <div>
+                            <div class="flex items-center gap-2 mb-2"><i class="fas fa-calendar-check" style="color: #059669;"></i><span class="font-semibold">随访建议</span></div>
+                            <p class="text-sm" style="color: #4b5563;">${plan.followup_advice}</p>
+                        </div>` : ''}
+                        <div class="text-xs" style="color: #9ca3af;">提交时间：${new Date(plan.generated_at).toLocaleString()}</div>
+                    `;
+                    document.getElementById('plan-view-modal').classList.add('active');
+                } else {
+                    showToast('暂无调理方案', 'warning');
+                }
+            } catch (err) { showToast('加载失败', 'error'); }
+        }
+
+        // ==================== 用户菜单 ====================
+        function toggleUserMenu() {
+            document.getElementById('user-menu-dropdown').classList.toggle('hidden');
+        }
+        function handleLogout() {
+            document.getElementById('user-menu-dropdown').classList.add('hidden');
+            showToast('已退出登录', 'success');
+            setTimeout(() => {
+                document.querySelectorAll('.page').forEach(x => x.classList.remove('active'));
+                document.getElementById('page-login').classList.add('active');
+            }, 500);
+        }
+        document.addEventListener('click', function(e) {
+            const menu = e.target.closest('#user-menu-dropdown');
+            const btn = e.target.closest('div[onclick="toggleUserMenu()"]');
+            if (!menu && !btn) document.getElementById('user-menu-dropdown').classList.add('hidden');
+        });
+        document.getElementById('login-password').addEventListener('keyup', function(e) {
+            if (e.key === 'Enter') handleLogin();
+        });
+        document.getElementById('plan-modal').addEventListener('click', function(e) {
+            if (e.target === this) closePlanModal();
+        });
+        document.getElementById('plan-view-modal').addEventListener('click', function(e) {
+            if (e.target === this) closeModal('plan-view-modal');
+        });
+    </script>
+</body>
+</html>

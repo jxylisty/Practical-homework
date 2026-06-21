@@ -1,0 +1,11 @@
+{
+  "name": "doctor-system",
+  "version": "1.0.0",
+  "private": true,
+  "description": "岐黄智诊 - 医生端控制台",
+  "scripts": {
+    "start": "npm start --prefix backend",
+    "migrate": "node database/migrate.js",
+    "test-db": "node backend/test-db.js"
+  }
+}

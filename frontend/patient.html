@@ -1,0 +1,853 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>患者端 - 岐黄智诊</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+  <style>
+    :root {
+      --color-bg: #f5f7fa;
+      --color-surface: #ffffff;
+      --color-primary: #059669;
+      --color-primary-light: #34d399;
+      --color-primary-dark: #047857;
+      --color-accent: #d97706;
+      --color-text: #1f2937;
+      --color-text-secondary: #6b7280;
+      --color-border: #e5e7eb;
+      --shadow-soft: 0 4px 20px rgba(0, 0, 0, 0.05);
+      --shadow-hover: 0 8px 30px rgba(5, 150, 105, 0.15);
+    }
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC', 'Microsoft YaHei', sans-serif;
+      background: var(--color-bg);
+      color: var(--color-text);
+      min-height: 100vh;
+    }
+    .page { display: none; animation: pageIn 0.4s ease; }
+    .page.active { display: block; }
+    @keyframes pageIn { from { opacity: 0; transform: translateY(20px); } to { opacity: 1; transform: translateY(0); } }
+    .card { background: var(--color-surface); border-radius: 16px; box-shadow: var(--shadow-soft); transition: all 0.3s ease; }
+    .card:hover { box-shadow: var(--shadow-hover); }
+    .btn { display: inline-flex; align-items: center; justify-content: center; gap: 8px; padding: 12px 24px; border: none; border-radius: 10px; font-size: 14px; font-weight: 500; cursor: pointer; transition: all 0.25s ease; }
+    .btn:hover { transform: translateY(-2px); }
+    .btn-primary { background: linear-gradient(135deg, var(--color-primary), var(--color-primary-dark)); color: white; }
+    .btn-primary:hover { box-shadow: 0 6px 20px rgba(5, 150, 105, 0.4); }
+    .btn-outline { background: white; border: 1px solid var(--color-border); color: var(--color-text-secondary); }
+    .btn-outline:hover { border-color: var(--color-primary); color: var(--color-primary); background: #ecfdf5; }
+    .btn-accent { background: linear-gradient(135deg, var(--color-accent), #b45309); color: white; }
+    .status-tag { display: inline-flex; align-items: center; padding: 4px 12px; border-radius: 20px; font-size: 12px; font-weight: 500; }
+    .status-pending { background: #fef3c7; color: #d97706; }
+    .status-processing { background: #dbeafe; color: #2563eb; }
+    .status-completed { background: #d1fae5; color: var(--color-primary); }
+    .status-cancelled { background: #f3f4f6; color: #9ca3af; }
+    .input-focus { border: 1px solid var(--color-border); border-radius: 10px; padding: 12px 16px; font-size: 14px; transition: all 0.3s ease; outline: none; width: 100%; }
+    .input-focus:focus { border-color: var(--color-primary); box-shadow: 0 0 0 3px rgba(5, 150, 105, 0.1); }
+    .toast { position: fixed; top: 20px; right: 20px; padding: 14px 20px; border-radius: 10px; color: white; font-size: 14px; z-index: 9999; transform: translateX(120%); transition: transform 0.3s ease; display: flex; align-items: center; gap: 10px; box-shadow: 0 4px 20px rgba(0, 0, 0, 0.15); }
+    .toast.show { transform: translateX(0); }
+    .toast.success { background: linear-gradient(135deg, #10b981, #059669); }
+    .toast.error { background: linear-gradient(135deg, #ef4444, #dc2626); }
+    .toast.warning { background: linear-gradient(135deg, #f59e0b, #d97706); }
+    .modal-overlay { position: fixed; inset: 0; background: rgba(0, 0, 0, 0.5); display: none; align-items: center; justify-content: center; z-index: 1000; padding: 20px; }
+    .modal-overlay.active { display: flex; }
+    .modal { background: white; border-radius: 16px; max-width: 500px; width: 100%; max-height: 90vh; overflow: auto; animation: modalIn 0.3s ease; padding: 24px; }
+    @keyframes modalIn { from { opacity: 0; transform: scale(0.9); } to { opacity: 1; transform: scale(1); } }
+    .tab-item { padding: 10px 20px; cursor: pointer; color: var(--color-text-secondary); border-bottom: 3px solid transparent; transition: all 0.3s ease; }
+    .tab-item:hover { color: var(--color-primary); }
+    .tab-item.active { color: var(--color-primary); border-bottom-color: var(--color-primary); font-weight: 600; }
+    @media (max-width: 768px) { .dashboard-grid { grid-template-columns: 1fr !important; } }
+    .hidden { display: none !important; }
+  </style>
+</head>
+<body>
+
+  <!-- Toast -->
+  <div id="toast" class="toast"><i class="fas fa-check-circle"></i><span id="toastMessage"></span></div>
+
+  <!-- ========== 登录页 ========== -->
+  <div id="page-login" class="page active">
+    <div class="min-h-screen flex items-center justify-center" style="background: linear-gradient(135deg, #f5f7fa 0%, #e8f5e9 100%);">
+      <div class="card p-10 w-full max-w-md mx-5">
+        <div class="text-center mb-8">
+          <div class="text-4xl mb-4">🏥</div>
+          <h1 class="text-3xl font-bold mb-2" style="color: var(--color-primary);">岐黄智诊</h1>
+          <p class="text-sm" style="color: var(--color-text-secondary);">患者端 · 体质辨识与咨询</p>
+        </div>
+        <div class="space-y-4">
+          <div>
+            <label class="block text-sm font-medium mb-2">账号</label>
+            <input type="text" id="login-username" class="input-focus" placeholder="请输入账号" value="zhangsan">
+          </div>
+          <div>
+            <label class="block text-sm font-medium mb-2">密码</label>
+            <input type="password" id="login-password" class="input-focus" placeholder="请输入密码" value="123456">
+          </div>
+          <button class="btn btn-primary w-full py-3 text-base" onclick="handleLogin()">
+            <i class="fas fa-sign-in-alt"></i> 登 录
+          </button>
+          <p class="text-xs text-center mt-4" style="color: #9ca3af;">
+            测试账号：zhangsan / lisi / wangwu / zhaoliu / qianqi / sunba （密码均为123456）
+          </p>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ========== 患者首页 ========== -->
+  <div id="page-home" class="page">
+    <!-- 顶部导航 -->
+    <nav class="bg-white shadow-sm sticky top-0 z-50">
+      <div class="max-w-4xl mx-auto px-4 h-16 flex items-center justify-between">
+        <div class="flex items-center gap-3">
+          <span class="text-xl font-bold" style="color: var(--color-primary);">岐黄智诊</span>
+        </div>
+        <div class="flex items-center gap-4">
+          <span class="text-sm" style="color: var(--color-text-secondary);" id="display-name">患者</span>
+          <button class="btn btn-outline py-2 px-4 text-sm" onclick="handleLogout()"><i class="fas fa-sign-out-alt"></i> 退出</button>
+        </div>
+      </div>
+    </nav>
+
+    <div class="max-w-4xl mx-auto px-4 py-6">
+      <!-- Tab 导航 -->
+      <div class="flex border-b mb-6 overflow-x-auto">
+        <div class="tab-item active" data-tab="report" onclick="switchTab('report')">体质报告</div>
+        <div class="tab-item" data-tab="tongue" onclick="switchTab('tongue')">舌诊辨识</div>
+        <div class="tab-item" data-tab="consult" onclick="switchTab('consult')">咨询医生</div>
+        <div class="tab-item" data-tab="history" onclick="switchTab('history')">历史建议</div>
+      </div>
+
+      <!-- ======== Tab：体质报告 ======== -->
+      <div id="tab-report" class="tab-content">
+        <!-- 患者档案 -->
+        <div class="card p-6 mb-5">
+          <div class="flex justify-between items-center mb-4">
+            <h3 class="font-semibold">个人档案</h3>
+            <button class="btn btn-outline py-2 px-4 text-sm" onclick="showProfileEdit()">
+              <i class="fas fa-edit"></i> 编辑档案
+            </button>
+          </div>
+          <div id="profile-content" class="text-sm text-gray-500">加载中...</div>
+        </div>
+
+        <!-- 最新报告 -->
+        <div class="card p-6 mb-5">
+          <h3 class="font-semibold mb-4">体质辨识报告</h3>
+          <div id="report-content">
+            <div class="text-center py-8 text-gray-400">暂无报告数据</div>
+          </div>
+        </div>
+
+        <!-- 反馈区 -->
+        <div class="card p-6">
+          <h3 class="font-semibold mb-4">报告反馈</h3>
+          <p class="text-sm text-gray-500 mb-4">这份报告对您有帮助吗？</p>
+          <div class="flex gap-3">
+            <button class="btn btn-outline" onclick="submitFeedback('useful')"><i class="fas fa-thumbs-up"></i> 有帮助</button>
+            <button class="btn btn-outline" onclick="submitFeedback('useless')"><i class="fas fa-thumbs-down"></i> 没帮助</button>
+          </div>
+          <div class="mt-4 hidden" id="feedback-note-area">
+            <textarea id="feedback-note" class="input-focus" rows="2" placeholder="请输入补充说明（选填）"></textarea>
+            <div class="flex gap-2 mt-2">
+              <button class="btn btn-primary py-2 text-sm" onclick="confirmFeedback()">确认提交</button>
+              <button class="btn btn-outline py-2 text-sm" onclick="cancelFeedback()">取消</button>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- ======== Tab：舌诊辨识 ======== -->
+      <div id="tab-tongue" class="tab-content hidden">
+        <div class="card p-6 mb-5">
+          <h3 class="font-semibold mb-4">📸 舌象采集</h3>
+          <p class="text-sm text-gray-500 mb-5">请按照指引拍摄您的舌头照片，AI 将为您进行体质辨识分析。</p>
+          
+          <div class="grid grid-cols-1 md:grid-cols-2 gap-5 mb-5">
+            <!-- 正面舌象 -->
+            <div class="border-2 border-dashed rounded-xl p-5 text-center" style="border-color: var(--color-border);" id="front-upload-area">
+              <div id="front-preview" class="hidden mb-3">
+                <img id="front-image" class="max-h-48 mx-auto rounded-lg" alt="正面舌象">
+              </div>
+              <div id="front-placeholder">
+                <i class="fas fa-camera text-4xl mb-3" style="color: #9ca3af;"></i>
+                <p class="text-sm font-medium mb-1">舌头正面照</p>
+                <p class="text-xs text-gray-400 mb-4">请伸出舌头，拍摄正面</p>
+              </div>
+              <input type="file" id="front-file-input" accept="image/*" capture="environment" class="hidden" onchange="previewImage(this, 'front')">
+              <div class="flex gap-2 justify-center">
+                <button class="btn btn-outline py-2 text-sm" onclick="document.getElementById('front-file-input').click()">
+                  <i class="fas fa-folder-open"></i> 选择图片
+                </button>
+                <button class="btn btn-outline py-2 text-sm hidden" id="front-retake-btn" onclick="resetUpload('front')">
+                  <i class="fas fa-redo"></i> 重新拍摄
+                </button>
+              </div>
+            </div>
+
+            <!-- 反面舌象 -->
+            <div class="border-2 border-dashed rounded-xl p-5 text-center" style="border-color: var(--color-border);" id="back-upload-area">
+              <div id="back-preview" class="hidden mb-3">
+                <img id="back-image" class="max-h-48 mx-auto rounded-lg" alt="反面舌象">
+              </div>
+              <div id="back-placeholder">
+                <i class="fas fa-camera text-4xl mb-3" style="color: #9ca3af;"></i>
+                <p class="text-sm font-medium mb-1">舌头反面照</p>
+                <p class="text-xs text-gray-400 mb-4">舌尖上翘，拍摄舌底</p>
+              </div>
+              <input type="file" id="back-file-input" accept="image/*" capture="environment" class="hidden" onchange="previewImage(this, 'back')">
+              <div class="flex gap-2 justify-center">
+                <button class="btn btn-outline py-2 text-sm" onclick="document.getElementById('back-file-input').click()">
+                  <i class="fas fa-folder-open"></i> 选择图片
+                </button>
+                <button class="btn btn-outline py-2 text-sm hidden" id="back-retake-btn" onclick="resetUpload('back')">
+                  <i class="fas fa-redo"></i> 重新拍摄
+                </button>
+              </div>
+            </div>
+          </div>
+
+          <button class="btn btn-primary w-full py-3 text-base" id="btn-analyze" onclick="startAnalysis()" disabled>
+            <i class="fas fa-microchip"></i> 开始 AI 体质辨识
+          </button>
+        </div>
+
+        <!-- 分析结果 -->
+        <div id="analysis-result" class="hidden">
+          <div class="card p-6 mb-5">
+            <h3 class="font-semibold mb-4">🧬 辨识结果</h3>
+            <div id="result-content"></div>
+          </div>
+        </div>
+
+        <!-- 分析中动画 -->
+        <div id="analysis-loading" class="hidden">
+          <div class="card p-10 text-center">
+            <div class="text-6xl mb-4 animate-pulse">🔬</div>
+            <p class="text-lg font-semibold mb-2" style="color: var(--color-primary);">AI 正在分析您的舌象...</p>
+            <p class="text-sm text-gray-400">请稍候，正在比对舌象特征数据库</p>
+            <div class="mt-6 w-full bg-gray-200 rounded-full h-2 max-w-xs mx-auto">
+              <div class="bg-green-500 h-2 rounded-full" style="width: 0%; animation: progressBar 2.5s ease forwards;"></div>
+            </div>
+            <style>
+              @keyframes progressBar { from { width: 0%; } to { width: 100%; } }
+            </style>
+          </div>
+        </div>
+      </div>
+
+      <!-- ======== Tab：咨询医生 ======== -->
+      <div id="tab-consult" class="tab-content hidden">
+        <div class="card p-6 mb-5">
+          <h3 class="font-semibold mb-4">发起在线咨询</h3>
+          <p class="text-sm text-gray-500 mb-4">您可基于体质报告向医生发起咨询，获取个性化调理方案。</p>
+          <div class="space-y-4">
+            <div>
+              <label class="block text-sm font-medium mb-2">咨询原因</label>
+              <input type="text" id="consult-reason" class="input-focus" placeholder="例：想了解如何调理体质">
+            </div>
+            <div>
+              <label class="block text-sm font-medium mb-2">症状描述（选填）</label>
+              <textarea id="consult-symptom" class="input-focus" rows="3" placeholder="请描述您的症状..."></textarea>
+            </div>
+            <div>
+              <label class="block text-sm font-medium mb-2">偏好时间（选填）</label>
+              <input type="text" id="consult-time" class="input-focus" placeholder="例：工作日下午">
+            </div>
+            <button class="btn btn-primary w-full" onclick="submitConsult()">
+              <i class="fas fa-paper-plane"></i> 提交咨询
+            </button>
+          </div>
+        </div>
+
+        <!-- 咨询单列表 -->
+        <div class="card p-6">
+          <h3 class="font-semibold mb-4">我的咨询单</h3>
+          <div id="consult-list" class="space-y-3">
+            <div class="text-center py-4 text-gray-400">暂无咨询记录</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- ======== Tab：历史建议 ======== -->
+      <div id="tab-history" class="tab-content hidden">
+        <div class="card p-6">
+          <h3 class="font-semibold mb-4">医生调理方案</h3>
+          <div id="history-list" class="space-y-4">
+            <div class="text-center py-8 text-gray-400">暂无调理方案</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ========== 咨询单详情弹窗 ========== -->
+  <div class="modal-overlay" id="order-detail-modal">
+    <div class="modal">
+      <div class="flex justify-between items-center mb-4">
+        <h3 class="font-semibold text-lg">咨询单详情</h3>
+        <button onclick="closeModal('order-detail-modal')" class="text-gray-400 hover:text-gray-600"><i class="fas fa-times text-xl"></i></button>
+      </div>
+      <div id="order-detail-content" class="space-y-4 text-sm"></div>
+      <div class="mt-4 flex justify-end">
+        <button class="btn btn-outline" onclick="closeModal('order-detail-modal')">关闭</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ========== 档案编辑弹窗 ========== -->
+  <div class="modal-overlay" id="profile-edit-modal">
+    <div class="modal">
+      <div class="flex justify-between items-center mb-4">
+        <h3 class="font-semibold text-lg">编辑个人档案</h3>
+        <button onclick="closeModal('profile-edit-modal')" class="text-gray-400 hover:text-gray-600"><i class="fas fa-times text-xl"></i></button>
+      </div>
+      <form id="profile-form" class="space-y-4" onsubmit="event.preventDefault(); saveProfile()">
+        <div class="grid grid-cols-2 gap-4">
+          <div>
+            <label class="block text-sm font-medium mb-2">姓名 <span class="text-red-500">*</span></label>
+            <input type="text" id="edit-name" class="input-focus" required>
+          </div>
+          <div>
+            <label class="block text-sm font-medium mb-2">年龄 <span class="text-red-500">*</span></label>
+            <input type="number" id="edit-age" class="input-focus" min="1" max="150" required>
+          </div>
+          <div>
+            <label class="block text-sm font-medium mb-2">性别 <span class="text-red-500">*</span></label>
+            <select id="edit-gender" class="input-focus" required>
+              <option value="male">男</option>
+              <option value="female">女</option>
+            </select>
+          </div>
+          <div>
+            <label class="block text-sm font-medium mb-2">既往体质</label>
+            <select id="edit-history-constitution" class="input-focus">
+              <option value="">无</option>
+              <option value="平和质">平和质</option>
+              <option value="气虚质">气虚质</option>
+              <option value="阳虚质">阳虚质</option>
+              <option value="阴虚质">阴虚质</option>
+              <option value="痰湿质">痰湿质</option>
+              <option value="湿热质">湿热质</option>
+              <option value="血瘀质">血瘀质</option>
+              <option value="气郁质">气郁质</option>
+              <option value="特禀质">特禀质</option>
+            </select>
+          </div>
+          <div>
+            <label class="block text-sm font-medium mb-2">身高(cm)</label>
+            <input type="number" id="edit-height" class="input-focus" min="50" max="250" step="0.1">
+          </div>
+          <div>
+            <label class="block text-sm font-medium mb-2">体重(kg)</label>
+            <input type="number" id="edit-weight" class="input-focus" min="10" max="300" step="0.1">
+          </div>
+        </div>
+        <div>
+          <label class="block text-sm font-medium mb-2">过敏史</label>
+          <textarea id="edit-allergy" class="input-focus" rows="2" placeholder="如有过敏史请填写"></textarea>
+        </div>
+        <div>
+          <label class="block text-sm font-medium mb-2">既往病史</label>
+          <textarea id="edit-medical" class="input-focus" rows="2" placeholder="如有既往病史请填写"></textarea>
+        </div>
+        <div class="flex gap-3 justify-end pt-2">
+          <button type="button" class="btn btn-outline" onclick="closeModal('profile-edit-modal')">取消</button>
+          <button type="submit" class="btn btn-primary"><i class="fas fa-save"></i> 保存档案</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <script>
+    const API_BASE = 'http://localhost:3000/api';
+    let currentUser = null;
+    let currentReportId = null;
+    let pendingFeedbackType = null;
+
+    // ==================== 工具 ====================
+    function showToast(msg, type = 'success') {
+      const t = document.getElementById('toast');
+      document.getElementById('toastMessage').textContent = msg;
+      t.className = 'toast ' + type;
+      t.classList.add('show');
+      setTimeout(() => t.classList.remove('show'), 3000);
+    }
+
+    function closeModal(id) {
+      document.getElementById(id).classList.remove('active');
+    }
+
+    // ==================== 档案编辑 ====================
+    let profileCache = null;
+
+    function showProfileEdit() {
+      if (!currentUser) { showToast('请先登录', 'warning'); return; }
+      // 填充表单
+      if (profileCache) {
+        document.getElementById('edit-name').value = profileCache.name || '';
+        document.getElementById('edit-age').value = profileCache.age || '';
+        document.getElementById('edit-gender').value = profileCache.gender || 'male';
+        document.getElementById('edit-history-constitution').value = profileCache.history_constitution || '';
+        document.getElementById('edit-height').value = profileCache.height || '';
+        document.getElementById('edit-weight').value = profileCache.weight || '';
+        document.getElementById('edit-allergy').value = profileCache.allergy_history || '';
+        document.getElementById('edit-medical').value = profileCache.medical_history || '';
+      } else {
+        document.getElementById('profile-form').reset();
+      }
+      document.getElementById('profile-edit-modal').classList.add('active');
+    }
+
+    async function saveProfile() {
+      const data = {
+        user_id: currentUser.userId,
+        name: document.getElementById('edit-name').value.trim(),
+        age: parseInt(document.getElementById('edit-age').value),
+        gender: document.getElementById('edit-gender').value,
+        history_constitution: document.getElementById('edit-history-constitution').value || undefined,
+        height: parseFloat(document.getElementById('edit-height').value) || undefined,
+        weight: parseFloat(document.getElementById('edit-weight').value) || undefined,
+        allergy_history: document.getElementById('edit-allergy').value.trim() || undefined,
+        medical_history: document.getElementById('edit-medical').value.trim() || undefined
+      };
+      if (!data.name || !data.age || !data.gender) {
+        showToast('请填写姓名、年龄和性别', 'warning'); return;
+      }
+      try {
+        const res = await fetch(`${API_BASE}/patient/profile`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(data)
+        });
+        const result = await res.json();
+        if (result.code === 200) {
+          showToast('档案保存成功！', 'success');
+          closeModal('profile-edit-modal');
+          loadDashboard();
+        } else {
+          showToast(result.message || '保存失败', 'error');
+        }
+      } catch (err) { showToast('网络错误', 'error'); }
+    }
+
+    // ==================== 舌诊辨识 ====================
+    let tongueImages = { front: null, back: null };
+
+    function previewImage(input, type) {
+      if (input.files && input.files[0]) {
+        const reader = new FileReader();
+        reader.onload = function(e) {
+          tongueImages[type] = e.target.result;
+          document.getElementById(type + '-image').src = e.target.result;
+          document.getElementById(type + '-preview').classList.remove('hidden');
+          document.getElementById(type + '-placeholder').classList.add('hidden');
+          document.getElementById(type + '-retake-btn').classList.remove('hidden');
+          checkAnalyzeReady();
+        };
+        reader.readAsDataURL(input.files[0]);
+      }
+    }
+
+    function resetUpload(type) {
+      tongueImages[type] = null;
+      document.getElementById(type + '-file-input').value = '';
+      document.getElementById(type + '-preview').classList.add('hidden');
+      document.getElementById(type + '-placeholder').classList.remove('hidden');
+      document.getElementById(type + '-retake-btn').classList.add('hidden');
+      checkAnalyzeReady();
+    }
+
+    function checkAnalyzeReady() {
+      const btn = document.getElementById('btn-analyze');
+      if (tongueImages.front) {
+        btn.disabled = false;
+        btn.className = 'btn btn-primary w-full py-3 text-base';
+      } else {
+        btn.disabled = true;
+        btn.className = 'btn btn-primary w-full py-3 text-base opacity-50 cursor-not-allowed';
+      }
+    }
+
+    async function startAnalysis() {
+      if (!tongueImages.front) { showToast('请先拍摄或选择舌头正面照', 'warning'); return; }
+      if (!currentUser) { showToast('请先登录', 'warning'); return; }
+
+      // 显示加载动画
+      document.getElementById('analysis-loading').classList.remove('hidden');
+      document.getElementById('analysis-result').classList.add('hidden');
+
+      try {
+        // 先上传正面
+        let res = await fetch(`${API_BASE}/tongue/upload`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            user_id: currentUser.userId,
+            image_data: tongueImages.front,
+            image_type: 'front',
+            device_type: '手机',
+            device_model: navigator.userAgent || '未知'
+          })
+        });
+        let result = await res.json();
+        
+        if (result.code !== 200) {
+          showToast(result.message || '分析失败', 'error');
+          document.getElementById('analysis-loading').classList.add('hidden');
+          return;
+        }
+
+        // 如果有反面图，也上传
+        if (tongueImages.back) {
+          await fetch(`${API_BASE}/tongue/upload`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              user_id: currentUser.userId,
+              image_data: tongueImages.back,
+              image_type: 'back',
+              device_type: '手机',
+              device_model: navigator.userAgent || '未知'
+            })
+          });
+        }
+
+        // 显示结果
+        setTimeout(() => {
+          document.getElementById('analysis-loading').classList.add('hidden');
+          renderAnalysisResult(result.data);
+          document.getElementById('analysis-result').classList.remove('hidden');
+          // 刷新首页报告
+          currentReportId = result.data.report_id;
+          loadDashboard();
+          showToast('体质辨识完成！', 'success');
+        }, 500);
+      } catch (err) {
+        document.getElementById('analysis-loading').classList.add('hidden');
+        showToast('网络错误，请重试', 'error');
+      }
+    }
+
+    function renderAnalysisResult(data) {
+      const f = data.tongue_features || {};
+      document.getElementById('result-content').innerHTML = `
+        <div class="text-center mb-6">
+          <div class="text-4xl font-bold mb-2" style="color: #5c6bc0;">${data.constitution_type}</div>
+          <div class="text-lg font-semibold" style="color: var(--color-accent);">置信度 ${data.confidence}%</div>
+          <div class="text-xs mt-1" style="color: #9ca3af;">AI 模型版本 v2.0</div>
+        </div>
+        <div class="bg-gray-50 rounded-xl p-4 mb-4">
+          <h4 class="text-sm font-semibold mb-3">舌象特征分析</h4>
+          <div class="flex gap-2 flex-wrap">
+            <span class="px-3 py-1 rounded-full text-xs" style="background: #e8eaf6; color: #5c6bc0;">舌色：${f.tongue_color || '-'}</span>
+            <span class="px-3 py-1 rounded-full text-xs" style="background: #e8eaf6; color: #5c6bc0;">苔色：${f.coating_color || '-'}</span>
+            <span class="px-3 py-1 rounded-full text-xs" style="background: #e8eaf6; color: #5c6bc0;">舌形：${f.tongue_shape || '-'}</span>
+          </div>
+        </div>
+        ${data.explanation ? `<div class="mb-4"><h4 class="text-sm font-semibold mb-2">分析说明</h4><p class="text-sm leading-relaxed text-gray-600">${data.explanation}</p></div>` : ''}
+        <div class="rounded-xl p-4" style="background: #ecfdf5; border: 1px solid #a7f3d0;">
+          <h4 class="text-sm font-semibold mb-2" style="color: var(--color-primary);">AI 调理建议</h4>
+          <p class="text-sm leading-relaxed" style="color: #4b5563;">${data.ai_suggestion || '建议咨询专业中医师获取个性化调理方案。'}</p>
+        </div>
+        ${data.image_url ? `<div class="mt-4 text-center"><img src="${data.image_url}" class="max-h-32 mx-auto rounded-lg border" alt="舌象"></div>` : ''}
+      `;
+    }
+
+    // ==================== 登录 ====================
+    async function handleLogin() {
+      const username = document.getElementById('login-username').value.trim();
+      const password = document.getElementById('login-password').value.trim();
+      if (!username || !password) { showToast('请输入账号和密码', 'warning'); return; }
+
+      try {
+        const res = await fetch(`${API_BASE}/login`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ username, password })
+        });
+        const data = await res.json();
+        if (data.success && data.user) {
+          currentUser = data.user;
+          document.getElementById('display-name').textContent = data.user.name || username;
+          showToast('登录成功！', 'success');
+          setTimeout(() => {
+            document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
+            document.getElementById('page-home').classList.add('active');
+            loadDashboard();
+          }, 500);
+        } else {
+          showToast(data.message || '登录失败', 'error');
+        }
+      } catch (err) {
+        showToast('无法连接服务器', 'error');
+      }
+    }
+
+    // ==================== 加载首页数据 ====================
+    async function loadDashboard() {
+      if (!currentUser) return;
+      try {
+        const res = await fetch(`${API_BASE}/patient/dashboard?user_id=${currentUser.userId}`);
+        const result = await res.json();
+        if (result.code === 200 && result.data) {
+          const d = result.data;
+          renderProfile(d.profile);
+          renderReport(d.report);
+          if (d.report) currentReportId = d.report.report_id;
+          renderConsultList();
+          renderHistoryList();
+        }
+      } catch (err) {
+        showToast('加载数据失败', 'error');
+      }
+    }
+
+    // ==================== 渲染档案 ====================
+    function renderProfile(profile) {
+      profileCache = profile;
+      if (!profile) {
+        document.getElementById('profile-content').innerHTML = '<div class="text-center py-4 text-gray-400">请先完善个人档案</div>';
+        return;
+      }
+      const genderMap = { male: '男', female: '女' };
+      document.getElementById('profile-content').innerHTML = `
+        <div class="grid grid-cols-2 gap-4">
+          <div><span class="text-gray-400">姓名：</span>${profile.name}</div>
+          <div><span class="text-gray-400">年龄：</span>${profile.age}岁</div>
+          <div><span class="text-gray-400">性别：</span>${genderMap[profile.gender] || profile.gender}</div>
+          <div><span class="text-gray-400">身高：</span>${profile.height ? profile.height + 'cm' : '-'}</div>
+          <div><span class="text-gray-400">体重：</span>${profile.weight ? profile.weight + 'kg' : '-'}</div>
+          <div><span class="text-gray-400">既往体质：</span>${profile.history_constitution || '-'}</div>
+          <div class="col-span-2"><span class="text-gray-400">过敏史：</span>${profile.allergy_history || '无'}</div>
+          <div class="col-span-2"><span class="text-gray-400">既往病史：</span>${profile.medical_history || '无'}</div>
+        </div>
+      `;
+    }
+
+    // ==================== 渲染报告 ====================
+    function renderReport(report) {
+      if (!report) {
+        document.getElementById('report-content').innerHTML = '<div class="text-center py-8 text-gray-400">暂无报告数据</div>';
+        return;
+      }
+      const f = report.tongue_features || {};
+      document.getElementById('report-content').innerHTML = `
+        <div class="text-center mb-6">
+          <div class="text-4xl font-bold mb-2" style="color: #5c6bc0;">${report.constitution_type}</div>
+          <div class="text-lg font-semibold" style="color: var(--color-accent);">置信度 ${report.confidence}%</div>
+          <div class="text-xs mt-1" style="color: #9ca3af;">AI 模型版本：${report.model_version || 'v1.0'} · ${new Date(report.generated_at).toLocaleString()}</div>
+        </div>
+        <div class="bg-gray-50 rounded-xl p-4 mb-4">
+          <h4 class="text-sm font-semibold mb-3">舌象特征分析</h4>
+          <div class="flex gap-2 flex-wrap">
+            <span class="px-3 py-1 rounded-full text-xs" style="background: #e8eaf6; color: #5c6bc0;">${f.tongue_color || '-'}</span>
+            <span class="px-3 py-1 rounded-full text-xs" style="background: #e8eaf6; color: #5c6bc0;">${f.coating_color || '-'}</span>
+            <span class="px-3 py-1 rounded-full text-xs" style="background: #e8eaf6; color: #5c6bc0;">${f.tongue_shape || '-'}</span>
+          </div>
+        </div>
+        ${report.explanation ? `<div class="mb-4"><h4 class="text-sm font-semibold mb-2">分析说明</h4><p class="text-sm leading-relaxed text-gray-600">${report.explanation}</p></div>` : ''}
+        <div class="rounded-xl p-4" style="background: #ecfdf5; border: 1px solid #a7f3d0;">
+          <h4 class="text-sm font-semibold mb-2" style="color: var(--color-primary);">AI 建议</h4>
+          <p class="text-sm leading-relaxed" style="color: #4b5563;">${report.ai_suggestion || '建议咨询专业中医师获取个性化调理方案。'}</p>
+        </div>
+      `;
+    }
+
+    // ==================== 反馈功能 ====================
+    function submitFeedback(type) {
+      if (!currentReportId) { showToast('暂无报告可反馈', 'warning'); return; }
+      pendingFeedbackType = type;
+      document.getElementById('feedback-note-area').classList.remove('hidden');
+    }
+
+    function cancelFeedback() {
+      pendingFeedbackType = null;
+      document.getElementById('feedback-note-area').classList.add('hidden');
+      document.getElementById('feedback-note').value = '';
+    }
+
+    async function confirmFeedback() {
+      if (!currentReportId || !pendingFeedbackType) return;
+      const note = document.getElementById('feedback-note').value.trim();
+      try {
+        const res = await fetch(`${API_BASE}/constitution/feedback`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            report_id: currentReportId,
+            user_id: currentUser.userId,
+            feedback_type: pendingFeedbackType,
+            feedback_note: note || undefined
+          })
+        });
+        const data = await res.json();
+        if (data.code === 200) {
+          showToast('反馈提交成功，谢谢！', 'success');
+          cancelFeedback();
+        } else {
+          showToast(data.message || '提交失败', 'error');
+        }
+      } catch (err) { showToast('网络错误', 'error'); }
+    }
+
+    // ==================== 咨询 ====================
+    async function submitConsult() {
+      if (!currentReportId) { showToast('暂无体质报告，请先完成舌诊', 'warning'); return; }
+      const reason = document.getElementById('consult-reason').value.trim();
+      const symptom = document.getElementById('consult-symptom').value.trim();
+      const time = document.getElementById('consult-time').value.trim();
+      if (!reason) { showToast('请输入咨询原因', 'warning'); return; }
+
+      try {
+        const res = await fetch(`${API_BASE}/consultation/orders`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            report_id: currentReportId,
+            patient_id: currentUser.userId,
+            consult_reason: reason,
+            preferred_time: time || undefined,
+            symptom_description: symptom || undefined
+          })
+        });
+        const data = await res.json();
+        if (data.code === 200) {
+          showToast('咨询已提交，等待医生接诊', 'success');
+          document.getElementById('consult-reason').value = '';
+          document.getElementById('consult-symptom').value = '';
+          document.getElementById('consult-time').value = '';
+          renderConsultList();
+        } else {
+          showToast(data.message || '提交失败', 'error');
+        }
+      } catch (err) { showToast('网络错误', 'error'); }
+    }
+
+    // ==================== 咨询单列表 ====================
+    async function renderConsultList() {
+      if (!currentUser) return;
+      try {
+        const res = await fetch(`${API_BASE}/consultation/orders?patient_id=${currentUser.userId}`);
+        const result = await res.json();
+        if (result.code !== 200 || !result.data || result.data.length === 0) {
+          document.getElementById('consult-list').innerHTML = '<div class="text-center py-4 text-gray-400">暂无咨询记录</div>';
+          return;
+        }
+        const statusMap = { pending: '待处理', processing: '处理中', completed: '已完成', cancelled: '已取消' };
+        const statusClass = { pending: 'status-pending', processing: 'status-processing', completed: 'status-completed', cancelled: 'status-cancelled' };
+
+        document.getElementById('consult-list').innerHTML = result.data.map(o => `
+          <div class="card p-4 cursor-pointer hover:-translate-y-1" onclick="showOrderDetail(${o.order_id})">
+            <div class="flex justify-between items-start mb-2">
+              <div>
+                <div class="font-medium text-sm">${o.consult_reason || '体质咨询'}</div>
+                <div class="text-xs text-gray-400 mt-1">体质类型：${o.constitution_type}</div>
+              </div>
+              <span class="status-tag ${statusClass[o.order_status] || 'status-pending'}">${statusMap[o.order_status] || o.order_status}</span>
+            </div>
+            <div class="text-xs text-gray-400">创建时间：${new Date(o.created_at).toLocaleString()}</div>
+          </div>
+        `).join('');
+      } catch (err) { /* 静默 */ }
+    }
+
+    // ==================== 历史调理方案 ====================
+    async function renderHistoryList() {
+      if (!currentUser) return;
+      try {
+        // 先查用户的已完成咨询单
+        const res = await fetch(`${API_BASE}/consultation/orders?patient_id=${currentUser.userId}`);
+        const result = await res.json();
+        if (result.code !== 200) return;
+        const completedOrders = result.data.filter(o => o.order_status === 'completed');
+        if (completedOrders.length === 0) {
+          document.getElementById('history-list').innerHTML = '<div class="text-center py-8 text-gray-400">暂无调理方案</div>';
+          return;
+        }
+        let html = '';
+        for (const order of completedOrders) {
+          const planRes = await fetch(`${API_BASE}/consultation/plans?order_id=${order.order_id}`);
+          const planData = await planRes.json();
+          if (planData.code === 200 && planData.data && planData.data.length > 0) {
+            const plan = planData.data[0];
+            html += `
+              <div class="card p-5">
+                <div class="flex justify-between items-center mb-3">
+                  <h4 class="font-semibold" style="color: var(--color-primary);">🧑‍⚕️ 调理方案</h4>
+                  <span class="text-xs text-gray-400">${new Date(plan.generated_at).toLocaleString()}</span>
+                </div>
+                ${plan.doctor_advice ? `<div class="mb-3"><p class="text-sm text-gray-600">${plan.doctor_advice}</p></div>` : ''}
+                ${plan.diet_advice ? `<div class="mb-2"><span class="text-xs font-semibold" style="color: var(--color-accent);">🥗 饮食建议：</span><span class="text-sm text-gray-600">${plan.diet_advice}</span></div>` : ''}
+                ${plan.exercise_advice ? `<div class="mb-2"><span class="text-xs font-semibold" style="color: var(--color-accent);">🏃 运动建议：</span><span class="text-sm text-gray-600">${plan.exercise_advice}</span></div>` : ''}
+                ${plan.lifestyle_advice ? `<div class="mb-2"><span class="text-xs font-semibold" style="color: var(--color-accent);">🌙 生活习惯：</span><span class="text-sm text-gray-600">${plan.lifestyle_advice}</span></div>` : ''}
+                ${plan.contraindication_tips ? `<div class="mb-2"><span class="text-xs font-semibold" style="color: #ef4444;">⚠️ 禁忌提示：</span><span class="text-sm text-gray-600">${plan.contraindication_tips}</span></div>` : ''}
+                ${plan.followup_advice ? `<div><span class="text-xs font-semibold">📋 随访建议：</span><span class="text-sm text-gray-600">${plan.followup_advice}</span></div>` : ''}
+              </div>
+            `;
+          }
+        }
+        document.getElementById('history-list').innerHTML = html || '<div class="text-center py-8 text-gray-400">暂无调理方案</div>';
+      } catch (err) { /* 静默 */ }
+    }
+
+    // ==================== 咨询单详情 ====================
+    async function showOrderDetail(orderId) {
+      try {
+        const res = await fetch(`${API_BASE}/consultation/orders?patient_id=${currentUser.userId}`);
+        const result = await res.json();
+        if (result.code !== 200) return;
+        const order = result.data.find(o => o.order_id == orderId);
+        if (!order) return;
+
+        const statusMap = { pending: '待处理', processing: '处理中', completed: '已完成', cancelled: '已取消' };
+        let html = `
+          <div class="grid grid-cols-2 gap-3 mb-4">
+            <div><span class="text-gray-400">咨询单号：</span>#${order.order_id}</div>
+            <div><span class="text-gray-400">状态：</span><span class="status-tag status-${order.order_status}">${statusMap[order.order_status]}</span></div>
+            <div><span class="text-gray-400">体质类型：</span>${order.constitution_type}</div>
+            <div><span class="text-gray-400">创建时间：</span>${new Date(order.created_at).toLocaleString()}</div>
+            <div class="col-span-2"><span class="text-gray-400">咨询原因：</span>${order.consult_reason || '-'}</div>
+            ${order.symptom_description ? `<div class="col-span-2"><span class="text-gray-400">症状描述：</span>${order.symptom_description}</div>` : ''}
+            ${order.preferred_time ? `<div class="col-span-2"><span class="text-gray-400">偏好时间：</span>${order.preferred_time}</div>` : ''}
+          </div>
+        `;
+        document.getElementById('order-detail-content').innerHTML = html;
+        document.getElementById('order-detail-modal').classList.add('active');
+      } catch (err) { showToast('加载失败', 'error'); }
+    }
+
+    // ==================== Tab切换 ====================
+    function switchTab(tab) {
+      document.querySelectorAll('.tab-item').forEach(t => {
+        t.classList.toggle('active', t.dataset.tab === tab);
+      });
+      document.querySelectorAll('.tab-content').forEach(c => c.classList.add('hidden'));
+      document.getElementById('tab-' + tab).classList.remove('hidden');
+      if (tab === 'consult') renderConsultList();
+      if (tab === 'history') renderHistoryList();
+    }
+
+    // ==================== 退出 ====================
+    function handleLogout() {
+      currentUser = null;
+      currentReportId = null;
+      document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
+      document.getElementById('page-login').classList.add('active');
+      showToast('已退出登录', 'success');
+    }
+
+    // 回车登录
+    document.getElementById('login-password').addEventListener('keyup', function(e) {
+      if (e.key === 'Enter') handleLogin();
+    });
+
+    // 点击弹窗遮罩关闭
+    document.getElementById('profile-edit-modal').addEventListener('click', function(e) {
+      if (e.target === this) closeModal('profile-edit-modal');
+    });
+  </script>
+</body>
+</html>
