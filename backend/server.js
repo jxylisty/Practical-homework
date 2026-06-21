@@ -34,6 +34,20 @@ async function initDb() {
   }
 }
 
+// ==================== 防越权中间件 ====================
+function authenticateToken(req, res, next) {
+  const authHeader = req.headers['authorization'];
+  const token = authHeader && authHeader.startsWith('Bearer ') ? authHeader.slice(7) : req.query.token;
+  if (!token) return res.status(401).json({ code: 401, message: '未提供认证令牌' });
+  try {
+    const decoded = JSON.parse(Buffer.from(token, 'base64').toString());
+    req.user = { userId: decoded.userId, role: decoded.role };
+    next();
+  } catch (e) {
+    return res.status(401).json({ code: 401, message: '令牌无效或已过期' });
+  }
+}
+
 // ==================== 登录 ====================
 app.post('/api/login', async (req, res) => {
   const { username, password } = req.body;
@@ -41,14 +55,45 @@ app.post('/api/login', async (req, res) => {
     return res.json({ success: false, message: '请输入账号和密码' });
   }
   try {
-    const [rows] = await pool.query(
-      'SELECT * FROM user_accounts WHERE username = ? AND password_hash = ?',
-      [username, password]
-    );
-    if (rows.length === 0) {
+    // 先查用户（不校验密码），用于判断锁定状态
+    const [userRows] = await pool.query('SELECT * FROM user_accounts WHERE username = ?', [username]);
+    if (userRows.length === 0) {
       return res.json({ success: false, message: '账号或密码错误' });
     }
-    const user = rows[0];
+    const user = userRows[0];
+
+    // 检查账号是否被锁定
+    if (user.locked_until && new Date(user.locked_until) > new Date()) {
+      const remainMin = Math.ceil((new Date(user.locked_until) - new Date()) / 60000);
+      return res.json({ success: false, message: `账号已锁定，请${remainMin}分钟后再试` });
+    }
+
+    // 校验密码
+    if (user.password_hash !== password) {
+      // 密码错误：累加失败次数
+      const newAttempts = (user.failed_login_attempts || 0) + 1;
+      if (newAttempts >= 5) {
+        // 达到5次，锁定15分钟
+        await pool.query(
+          'UPDATE user_accounts SET failed_login_attempts = ?, locked_until = DATE_ADD(NOW(), INTERVAL 15 MINUTE) WHERE user_id = ?',
+          [newAttempts, user.user_id]
+        );
+        return res.json({ success: false, message: '密码错误次数过多，账号已锁定15分钟' });
+      } else {
+        await pool.query(
+          'UPDATE user_accounts SET failed_login_attempts = ? WHERE user_id = ?',
+          [newAttempts, user.user_id]
+        );
+        return res.json({ success: false, message: `账号或密码错误（已失败${newAttempts}次，5次将锁定）` });
+      }
+    }
+
+    // 密码正确：清零失败次数和锁定时间
+    await pool.query(
+      'UPDATE user_accounts SET failed_login_attempts = 0, locked_until = NULL WHERE user_id = ?',
+      [user.user_id]
+    );
+
     const token = generateToken(user.user_id, user.role);
     let displayName = username;
     if (user.role === 'patient') {
@@ -95,9 +140,13 @@ app.post('/api/patient/profile', async (req, res) => {
   }
 });
 
-app.get('/api/patient/profile', async (req, res) => {
+app.get('/api/patient/profile', authenticateToken, async (req, res) => {
   const { user_id } = req.query;
   if (!user_id) return res.json({ code: 400, message: '缺少 user_id' });
+  // 越权校验：patient 角色只能查自己的档案
+  if (req.user.role === 'patient' && String(req.user.userId) !== String(user_id)) {
+    return res.status(403).json({ code: 403, message: '无权查看他人档案' });
+  }
   try {
     const [rows] = await pool.query('SELECT * FROM patient_profiles WHERE user_id = ?', [user_id]);
     if (rows.length === 0) return res.json({ code: 404, message: '档案不存在' });
@@ -177,14 +226,14 @@ app.get('/api/consultation/orders', async (req, res) => {
       query = `SELECT co.*, pp.name AS patient_name, pp.age AS patient_age, pp.gender AS patient_gender,
                       cr.constitution_type, cr.confidence, cr.tongue_features
                FROM consultation_orders co
-               JOIN patient_profiles pp ON co.patient_id = pp.user_id
-               JOIN constitution_reports cr ON co.report_id = cr.report_id
+               LEFT JOIN patient_profiles pp ON co.patient_id = pp.user_id
+               LEFT JOIN constitution_reports cr ON co.report_id = cr.report_id
                ORDER BY co.created_at DESC`;
       params = [];
     } else if (patient_id) {
       query = `SELECT co.*, cr.constitution_type, cr.confidence
                FROM consultation_orders co
-               JOIN constitution_reports cr ON co.report_id = cr.report_id
+               LEFT JOIN constitution_reports cr ON co.report_id = cr.report_id
                WHERE co.patient_id = ?
                ORDER BY co.created_at DESC`;
       params = [patient_id];
@@ -220,6 +269,13 @@ app.post('/api/consultation/plans', async (req, res) => {
   const { order_id, doctor_id, doctor_advice, diet_advice, exercise_advice, lifestyle_advice, contraindication_tips, followup_advice, ai_advice } = req.body;
   if (!order_id) return res.json({ code: 400, message: '缺少 order_id' });
   try {
+    // 防重复流转：检查订单状态
+    const [orderRows] = await pool.query('SELECT order_status FROM consultation_orders WHERE order_id = ?', [order_id]);
+    if (orderRows.length === 0) return res.json({ code: 404, message: '订单不存在' });
+    if (orderRows[0].order_status === 'completed') {
+      return res.json({ code: 400, message: '该订单已处理，请勿重复提交' });
+    }
+
     const [result] = await pool.query(
       `INSERT INTO conditioning_plans (order_id, doctor_id, doctor_advice, ai_advice, diet_advice, exercise_advice, lifestyle_advice, contraindication_tips, followup_advice) VALUES (?,?,?,?,?,?,?,?,?)`,
       [order_id, doctor_id || null, doctor_advice || null, ai_advice || null, diet_advice || null, exercise_advice || null, lifestyle_advice || null, contraindication_tips || null, followup_advice || null]
@@ -238,6 +294,34 @@ app.get('/api/consultation/plans', async (req, res) => {
   try {
     const [rows] = await pool.query('SELECT * FROM conditioning_plans WHERE order_id = ? ORDER BY plan_id DESC', [order_id]);
     res.json({ code: 200, message: '成功', data: rows });
+  } catch (err) {
+    res.json({ code: 500, message: err.message });
+  }
+});
+
+// ==================== 患者档案分页模糊查询 ====================
+app.get('/api/patients/query', async (req, res) => {
+  const { keyword, page = 1, size = 10 } = req.query;
+  const offset = (parseInt(page) - 1) * parseInt(size);
+  try {
+    let whereClause = '';
+    let params = [];
+    if (keyword) {
+      whereClause = 'WHERE pp.name LIKE ? OR pp.history_constitution LIKE ?';
+      params = [`%${keyword}%`, `%${keyword}%`];
+    }
+    // 查总数
+    const [countResult] = await pool.query(
+      `SELECT COUNT(*) AS total FROM patient_profiles pp ${whereClause}`,
+      params
+    );
+    const total = countResult[0].total;
+    // 查分页数据
+    const [rows] = await pool.query(
+      `SELECT pp.*, ua.username FROM patient_profiles pp LEFT JOIN user_accounts ua ON pp.user_id = ua.user_id ${whereClause} ORDER BY pp.created_at DESC LIMIT ? OFFSET ?`,
+      [...params, parseInt(size), offset]
+    );
+    res.json({ code: 200, message: '成功', data: { list: rows, total, page: parseInt(page), size: parseInt(size) } });
   } catch (err) {
     res.json({ code: 500, message: err.message });
   }

@@ -462,7 +462,7 @@
 
     function checkAnalyzeReady() {
       const btn = document.getElementById('btn-analyze');
-      if (tongueImages.front) {
+      if (tongueImages.front && tongueImages.back) {
         btn.disabled = false;
         btn.className = 'btn btn-primary w-full py-3 text-base';
       } else {
@@ -472,8 +472,17 @@
     }
 
     async function startAnalysis() {
-      if (!tongueImages.front) { showToast('请先拍摄或选择舌头正面照', 'warning'); return; }
+      if (!tongueImages.front || !tongueImages.back) {
+        showToast('请拍摄完整的正反两面舌象', 'warning');
+        return;
+      }
       if (!currentUser) { showToast('请先登录', 'warning'); return; }
+
+      // 防连击：锁定按钮
+      const btn = document.getElementById('btn-analyze');
+      const origHTML = btn.innerHTML;
+      btn.disabled = true;
+      btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> 分析中...';
 
       // 显示加载动画
       document.getElementById('analysis-loading').classList.remove('hidden');
@@ -528,6 +537,10 @@
       } catch (err) {
         document.getElementById('analysis-loading').classList.add('hidden');
         showToast('网络错误，请重试', 'error');
+      } finally {
+        // 恢复按钮
+        btn.disabled = false;
+        btn.innerHTML = origHTML;
       }
     }
 
@@ -570,6 +583,11 @@
         });
         const data = await res.json();
         if (data.success && data.user) {
+          // 角色隔离：仅居民可登录患者端
+          if (data.user.role !== 'patient') {
+            showToast('非居民账号无法登录此端', 'error');
+            return;
+          }
           currentUser = data.user;
           document.getElementById('display-name').textContent = data.user.name || username;
           showToast('登录成功！', 'success');
@@ -701,6 +719,12 @@
       const time = document.getElementById('consult-time').value.trim();
       if (!reason) { showToast('请输入咨询原因', 'warning'); return; }
 
+      // 防连击：锁定提交按钮
+      const submitBtn = event.target;
+      const origHTML = submitBtn.innerHTML;
+      submitBtn.disabled = true;
+      submitBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> 提交中...';
+
       try {
         const res = await fetch(`${API_BASE}/consultation/orders`, {
           method: 'POST',
@@ -724,6 +748,11 @@
           showToast(data.message || '提交失败', 'error');
         }
       } catch (err) { showToast('网络错误', 'error'); }
+      finally {
+        // 恢复提交按钮
+        submitBtn.disabled = false;
+        submitBtn.innerHTML = origHTML;
+      }
     }
 
     // ==================== 咨询单列表 ====================

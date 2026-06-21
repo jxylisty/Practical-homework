@@ -225,6 +225,7 @@
 
     <script>
         const API_BASE = 'http://localhost:3000/api';
+        let currentUser = null;
         let allOrders = [];
         let currentTab = 'all';
         let planModalOrderId = null;
@@ -261,6 +262,12 @@
                 });
                 const data = await res.json();
                 if (data.success) {
+                    // 角色校验：仅医生/管理员可登录医生端
+                    if (!data.user || (data.user.role !== 'doctor' && data.user.role !== 'admin')) {
+                        showToast('非医生账号无法登录此端', 'error');
+                        return;
+                    }
+                    currentUser = data.user;
                     showToast('登录成功！', 'success');
                     setTimeout(() => {
                         document.querySelectorAll('.page').forEach(x => x.classList.remove('active'));
@@ -423,7 +430,7 @@
             try {
                 const res = await fetch(`${API_BASE}/consultation/orders/${orderId}`, {
                     method: 'PUT', headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ doctor_id: 1, order_status: 'processing' })
+                    body: JSON.stringify({ doctor_id: currentUser.userId, order_status: 'processing' })
                 });
                 const data = await res.json();
                 if (data.code === 200) { showToast('已接单成功！', 'success'); loadOrders(); }
@@ -461,11 +468,16 @@
             if (!planModalOrderId) { showToast('订单信息缺失', 'warning'); return; }
             const da = document.getElementById('plan-doctor-advice').value.trim();
             if (!da) { showToast('请输入医生建议', 'warning'); return; }
+            // 防重复点击：锁定提交按钮
+            const submitBtn = document.querySelector('#plan-form button[type="submit"]');
+            const origText = submitBtn.innerHTML;
+            submitBtn.disabled = true;
+            submitBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> 提交中...';
             try {
                 const res = await fetch(`${API_BASE}/consultation/plans`, {
                     method: 'POST', headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({
-                        order_id: planModalOrderId, doctor_id: 1,
+                        order_id: planModalOrderId, doctor_id: currentUser.userId,
                         doctor_advice: da,
                         diet_advice: document.getElementById('plan-diet-advice').value.trim() || undefined,
                         exercise_advice: document.getElementById('plan-exercise-advice').value.trim() || undefined,
@@ -478,6 +490,11 @@
                 if (data.code === 200) { showToast('调理方案提交成功！', 'success'); closePlanModal(); loadOrders(); }
                 else { showToast(data.message || '提交失败', 'error'); }
             } catch (err) { showToast('网络错误', 'error'); }
+            finally {
+                // 恢复提交按钮
+                submitBtn.disabled = false;
+                submitBtn.innerHTML = origText;
+            }
         }
 
         // ==================== 查看方案 ====================

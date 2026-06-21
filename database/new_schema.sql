@@ -24,6 +24,8 @@ CREATE TABLE user_accounts (
   phone_hash VARCHAR(64) COMMENT '手机号哈希(SHA256)',
   phone_encrypted VARCHAR(256) COMMENT '手机号加密(AES)',
   password_hash VARCHAR(256) NOT NULL COMMENT '密码哈希',
+  failed_login_attempts INT DEFAULT 0 COMMENT '连续登录失败次数',
+  locked_until TIMESTAMP NULL COMMENT '账号锁定到期时间',
   login_status TINYINT DEFAULT 0 COMMENT '登录状态：0离线 1在线',
   role ENUM('patient', 'doctor', 'admin') NOT NULL DEFAULT 'patient' COMMENT '角色',
   created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
